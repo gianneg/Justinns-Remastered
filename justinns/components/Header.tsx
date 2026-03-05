@@ -1,25 +1,50 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
 import Image from "next/image"
 import Link from "next/link"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import type { User } from "@supabase/supabase-js"
+import { supabase } from "@/lib/supabase"
 
 export default function Header() {
-
   const router = useRouter()
 
-  const [user, setUser] = useState<any>(null)
-  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [open, setOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    const getUser = async () => {
+    let mounted = true
+
+    const load = async () => {
       const { data } = await supabase.auth.getUser()
-      setUser(data.user)
+      if (mounted) setUser(data.user ?? null)
     }
 
-    getUser()
+    load()
+
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      load()
+      setOpen(false)
+    })
+
+    return () => {
+      mounted = false
+      sub.subscription.unsubscribe()
+    }
+  }, [])
+
+  // close drop down
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!dropdownRef.current) return
+      if (dropdownRef.current.contains(e.target as Node)) return
+      setOpen(false)
+    }
+
+    document.addEventListener("click", onDocClick)
+    return () => document.removeEventListener("click", onDocClick)
   }, [])
 
   const handleLogout = async () => {
@@ -28,84 +53,110 @@ export default function Header() {
   }
 
   const profileImage =
-    user?.user_metadata?.avatar_url ||
+    (user?.user_metadata?.avatar_url as string | undefined) ||
     "https://simplyilm.com/wp-content/uploads/2017/08/temporary-profile-placeholder-1.jpg"
 
   return (
-    <header className="navbar">
+    <header className="flex items-center justify-between py-4">
 
-      <Link href="/home">
+      {/* Logo */}
+      <Link href="/home" className="shrink-0">
         <Image
           src="/assets/general-images/logo.png"
-          alt="logo"
-          width={120}
-          height={40}
+          alt="JustInns"
+          width={160}
+          height={80}
+          className="h-20 w-auto"
+          priority
         />
       </Link>
 
-      <div className="links">
-        <Link href="/lodging?lodging_type=Hotel">Hotels</Link>
-        <Link href="/lodging?lodging_type=Inn">Inns</Link>
-        <Link href="/lodging?lodging_type=Pension%20House">Pension</Link>
-        <Link href="/booking">Book Now</Link>
-      </div>
+      {/* Nav links */}
+      <nav className="hidden md:flex items-center justify-between w-87.5">
+        <Link className="text-black hover:underline" href="/lodging?lodging_type=Hotel">
+          Hotels
+        </Link>
+        <Link className="text-black hover:underline" href="/lodging?lodging_type=Inn">
+          Inns
+        </Link>
+        <Link
+          className="text-black hover:underline"
+          href="/lodging?lodging_type=Pension%20House"
+        >
+          Pension
+        </Link>
+        <Link className="text-black hover:underline" href="/booking">
+          Book Now
+        </Link>
+      </nav>
 
+      {/* Right side */}
       {!user ? (
-
         <button
           id="signin"
           onClick={() => router.push("/login")}
+          className="px-4 py-3 border border-black rounded-full bg-black text-white text-base"
         >
           Sign in
         </button>
-
       ) : (
-
-        <div className="loggedin-dropdown">
+        <div ref={dropdownRef} className="relative">
 
           <button
-            id="loggedin"
-            onClick={() => setDropdownOpen(!dropdownOpen)}
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="bg-black px-3 py-2 flex items-center justify-center gap-2 cursor-pointer rounded-full w-[78px]"
+            aria-haspopup="menu"
+            aria-expanded={open}
           >
-            <i className="fa-solid fa-bars"></i>
-
+            <i className="fa-solid fa-bars text-white" />
             <Image
               src={profileImage}
-              alt="profile"
+              alt="User"
               width={30}
               height={30}
-              style={{ borderRadius: "50%" }}
+              className="rounded-full"
             />
           </button>
 
-          {dropdownOpen && (
-            <ul id="user-dropdown">
-
-              <li>
-                <Link href="/profile">Profile</Link>
+          {/* Dropdown */}
+          {open && (
+            <ul
+              className="absolute right-0 mt-3 w-37.5 bg-white border border-gray-300 shadow-md z-50 p-2"
+              role="menu"
+            >
+              <li className="px-2 py-1">
+                <Link className="block text-sm text-black hover:underline" href="/profile">
+                  Profile
+                </Link>
               </li>
 
-              <li>
-                <Link href="/dashboard">Dashboard</Link>
+              <li className="px-2 py-1">
+                <Link className="block text-sm text-black hover:underline" href="/dashboard">
+                  Dashboard
+                </Link>
               </li>
 
-              <li>
-                <Link href="/favorites">Favorites</Link>
+              <li className="px-2 py-1">
+                <Link className="block text-sm text-black hover:underline" href="/favorites">
+                  Favorites
+                </Link>
               </li>
 
-              <li>
-                <button onClick={handleLogout}>
+              <li className="px-2 py-1">
+                <button
+                  onClick={handleLogout}
+                  className="block w-full text-left text-sm text-black hover:underline"
+                  role="menuitem"
+                >
                   Logout
                 </button>
               </li>
-
             </ul>
           )}
 
         </div>
-
       )}
-
     </header>
   )
 }
