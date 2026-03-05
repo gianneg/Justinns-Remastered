@@ -1,10 +1,10 @@
 import { supabase } from "@/lib/supabase"
 
 export type LodgingDetails = {
-  id: string | number
-  Name: string
-  Location: string
-  Description: string | null
+  lodging_id: string | number
+  lodging_name: string
+  lodging_location: string
+  lodging_description: string | null
 }
 
 export type LodgingImage = {
@@ -34,7 +34,7 @@ export type RatingStats = {
 export async function fetchLodgingDetailsByName(lodgingName: string) {
   const { data, error } = await supabase
     .from("lodging")
-    .select("id, Name, Location, Description")
+    .select("lodging_id, lodging_name, lodging_location, lodging_description")
     .eq("Name", lodgingName)
     .single()
 
@@ -68,7 +68,7 @@ export async function fetchLodgingImages(lodgingName: string) {
 
 export async function fetchAvailableRooms(lodgingName: string) {
   const { data, error } = await supabase
-    .from("rooms")
+    .from("room")
     .select("Room_Type, Max_Persons")
     .eq("Lodging_Name", lodgingName)
     .eq("Is_Available", true)

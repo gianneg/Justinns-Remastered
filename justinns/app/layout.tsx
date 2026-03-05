@@ -1,6 +1,7 @@
 import "./globals.css"
 import "@fortawesome/fontawesome-free/css/all.min.css"
 import { Poppins } from "next/font/google"
+import Footer from "@/components/Footer"
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -12,6 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${poppins.className} max-w-[1140px] w-[90%] mx-auto`}>
         {children}
+        <Footer />
       </body>
     </html>
   )

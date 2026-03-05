@@ -1,19 +1,19 @@
 import { supabase } from "@/lib/supabase"
 
 export type LodgingRow = {
-  id: string | number
-  Name: string
-  Location: string
+  lodging_id: string | number
+  lodging_name: string
+  lodging_location: string
   Image_Path: string | null
   Avg_Rating: number
   Total_Ratings: number
-  Lodging_Type: string
+  lodging_type: string
 }
 
 export async function getLodgingData(lodgingType: string) {
   const { data, error } = await supabase
     .from("lodging")
-    .select("id, Name, Location, Image_Path, Avg_Rating, Total_Ratings, Lodging_Type")
+    .select("lodging_id, lodging_name, lodging_location, Image_Path, Avg_Rating, Total_Ratings, lodging_type")
     .eq("Lodging_Type", lodgingType)
     .order("Name", { ascending: true })
 

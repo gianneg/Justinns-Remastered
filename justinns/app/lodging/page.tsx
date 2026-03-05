@@ -5,7 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useSearchParams } from "next/navigation"
 import Header from "@/components/Header"
-import { getLodgingData, type LodgingRow } from "@/lib/lodging"
+import { getLodgingData, type LodgingDetails } from "@/lib/queries"
 
 function RatingDots({ rating }: { rating: number }) {
   const filled = Math.floor(rating || 0)
@@ -38,7 +38,7 @@ export default function LodgingPage() {
     [searchParams]
   )
 
-  const [rows, setRows] = useState<LodgingRow[]>([])
+  const [rows, setRows] = useState<LodgingDetails[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>("")
 
@@ -92,7 +92,7 @@ export default function LodgingPage() {
               )}&lodging_type=${encodeURIComponent(lodgingType)}`
 
               return (
-                <div key={row.id} className="group">
+                <div key={row.lodging_id} className="group">
                   <Link href={href} className="block text-black">
                     <div className="relative w-full aspect-[338.6/213.06] overflow-hidden rounded-[10px]">
                       <Image
@@ -105,7 +105,7 @@ export default function LodgingPage() {
                     </div>
 
                     <p className="mt-3 text-[18px] font-bold group-hover:underline">
-                      {row.Name}
+                      {row.lodging_name}
                     </p>
 
                     <div className="mt-1 flex items-center gap-5">

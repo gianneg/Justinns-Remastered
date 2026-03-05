@@ -16,32 +16,31 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-
+  
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
-
+  
     if (signInError) {
       setError("Invalid email or password.")
       return
     }
-
+  
     const userId = data.user?.id
-    if (userId) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_admin")
-        .eq("id", userId)
-        .single()
-
-      if (profile?.is_admin) router.push("/dashboards/admin-dashboard")
-      else router.push("/dashboards/user-dashboard")
-      return
+  
+    const { data: profile } = await supabase
+      .from("user")
+      .select("adminstatus")
+      .eq("auth_id", userId)
+      .single()
+  
+    if (profile?.adminstatus === 1)
+      router.push("/dashboards/admin-dashboard")
+    else
+      router.push("/dashboards/user-dashboard")
     }
 
-    router.push("/home")
-  }
 
   return (
     <>

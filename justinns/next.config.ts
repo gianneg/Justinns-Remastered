@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  images: {
+    domains: [
+      "simplyilm.com", 
+      "via.placeholder.com"
+    ],
+  },
 };
 
 export default nextConfig;
