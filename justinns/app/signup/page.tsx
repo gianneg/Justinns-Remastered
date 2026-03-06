@@ -43,13 +43,13 @@ export default function SignupPage() {
       return
     }
 
-    const { error: profileError } = await supabase.from("profiles").insert({
-      id: userId,
-      first_name: firstName,
-      last_name: lastName,
-      phone,
+    const { error: profileError } = await supabase.from("user").insert({
+      user_id: userId,
+      firstname: firstName,
+      lastname: lastName,
+      phone_number: phone,
       is_admin: userType === "1",
-      avatar_url: null,
+      profile_image: null,
     })
 
     if (profileError) {
