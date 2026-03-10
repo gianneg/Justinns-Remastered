@@ -52,6 +52,21 @@ export default function Header() {
     router.push("/login")
   }
 
+  const handleDashboardClick = async () => {
+    const userId = user?.id
+    if (!userId) return
+
+    const { data: profile } = await supabase
+      .from("user")
+      .select("is_admin")
+      .eq("auth_id", userId)
+      .single()
+
+    if (profile?.is_admin === true)
+      router.push("/dashboards/admin-dashboard")
+    else router.push("/dashboards/user-dashboard")
+  }
+
   const profileImage =
     (user?.user_metadata?.avatar_url as string | undefined) ||
     "https://simplyilm.com/wp-content/uploads/2017/08/temporary-profile-placeholder-1.jpg"
@@ -132,9 +147,12 @@ export default function Header() {
               </li>
 
               <li className="px-2 py-1">
-                <Link className="block text-sm text-black hover:underline" href="/dashboard">
+                <button
+                  onClick={handleDashboardClick}
+                  className="block w-full text-left text-sm text-black hover:underline"
+                >
                   Dashboard
-                </Link>
+                </button>
               </li>
 
               <li className="px-2 py-1">
