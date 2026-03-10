@@ -44,9 +44,7 @@ function ReviewRating({ score }: { score: number }) {
       {Array.from({ length: full }).map((_, i) => (
         <span key={`rf-${i}`} className="h-3 w-3 rounded-full bg-salmon" />
       ))}
-      {hasHalf && (
-        <span className="h-3 w-3 rounded-full bg-salmon/50" title="half" />
-      )}
+      {hasHalf && <span className="h-3 w-3 rounded-full bg-salmon/50" title="half" />}
       {Array.from({ length: empty }).map((_, i) => (
         <span key={`re-${i}`} className="h-3 w-3 rounded-full border border-salmon" />
       ))}
@@ -62,20 +60,23 @@ export default function LodgingDetailsPage() {
     () => searchParams.get("lodging_name") ?? "",
     [searchParams]
   )
+
   const lodgingType = useMemo(
     () => searchParams.get("lodging_type") ?? "",
     [searchParams]
   )
 
   const [lodging, setLodging] = useState<LodgingDetails | null>(null)
-  const [stats, setStats] = useState<RatingStats>({ Avg_Rating: 0, Total_Ratings: 0 })
+  const [stats, setStats] = useState<RatingStats>({
+    Avg_Rating: 0,
+    Total_Ratings: 0,
+  })
   const [images, setImages] = useState<LodgingImage[]>([])
   const [rooms, setRooms] = useState<RoomRow[]>([])
   const [reviews, setReviews] = useState<ReviewRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-
-  const [mainImage, setMainImage] = useState<string>("")
+  const [mainImage, setMainImage] = useState("")
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
@@ -86,11 +87,12 @@ export default function LodgingDetailsPage() {
     const run = async () => {
       setLoading(true)
       setError("")
+
       try {
         const [lod, st, imgs, rms, revs] = await Promise.all([
           fetchLodgingDetailsByName(lodgingName),
           fetchRatingStats(lodgingName),
-          fetchLodgingImages(lodgingName),
+          fetchLodgingImages(lodgingName, lodgingType),
           fetchAvailableRooms(lodgingName),
           fetchLodgingReviews(lodgingName),
         ])
@@ -102,11 +104,11 @@ export default function LodgingDetailsPage() {
         setImages(imgs)
         setRooms(rms)
         setReviews(revs)
-
-        const first = imgs?.[0]?.File_Path || "https://via.placeholder.com/700x400"
-        setMainImage(first)
+        setMainImage(imgs[0]?.File_Path ?? "")
       } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Failed to load lodging details.")
+        if (!cancelled) {
+          setError(e?.message ?? "Failed to load lodging details.")
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -117,7 +119,7 @@ export default function LodgingDetailsPage() {
     return () => {
       cancelled = true
     }
-  }, [lodgingName])
+  }, [lodgingName, lodgingType])
 
   if (!lodgingName) {
     return (
@@ -135,8 +137,6 @@ export default function LodgingDetailsPage() {
       <Header />
 
       <main className="py-6">
-
-        {/* Breadcrumbs */}
         <div className="text-sm mb-4">
           <Link
             className="text-black hover:underline"
@@ -153,17 +153,18 @@ export default function LodgingDetailsPage() {
 
         {!loading && !error && lodging && (
           <>
-            {/* Header section */}
             <section className="bg-white rounded-lg pt-6">
               <div className="flex items-start justify-between gap-4">
                 <h1 className="text-[32px] font-semibold text-slate-800">
-                  {lodging.Name}
+                  {lodging.lodging_name}
                 </h1>
 
                 <button
                   onClick={() => setSaved((v) => !v)}
                   className={`border rounded-full px-4 py-2 text-sm flex items-center gap-2 ${
-                    saved ? "bg-white text-black border-black font-semibold" : "bg-black text-white border-gray-300"
+                    saved
+                      ? "bg-white text-black border-black font-semibold"
+                      : "bg-black text-white border-gray-300"
                   }`}
                 >
                   <span className="text-base">{saved ? "♥" : "♡"}</span>
@@ -179,12 +180,14 @@ export default function LodgingDetailsPage() {
 
                 <div className="mt-2 flex flex-col gap-1">
                   <p className="flex items-center gap-2">
-                    <span>📍</span> {lodging.Location}
+                    <span>📍</span> {lodging.lodging_location}
                   </p>
 
                   <button
                     className="text-left hover:underline w-fit"
-                    onClick={() => router.push(`/write-review?lodging_name=${encodeURIComponent(lodgingName)}`)}
+                    onClick={() =>
+                      router.push(`/write-review?lodging_name=${encodeURIComponent(lodgingName)}`)
+                    }
                   >
                     ✍️ Write a review
                   </button>
@@ -192,56 +195,61 @@ export default function LodgingDetailsPage() {
               </div>
             </section>
 
-            {/* About + Images */}
             <section className="mt-12 bg-white shadow-sm rounded-lg">
               <div className="flex flex-col lg:flex-row gap-6 p-5">
                 <div className="lg:w-[40%]">
                   <h2 className="text-2xl font-semibold mb-4">About</h2>
                   <p className="text-sm text-slate-700 whitespace-pre-line">
-                    {lodging.Description || "No description yet."}
+                    {lodging.lodging_description || "No description yet."}
                   </p>
                 </div>
 
                 <div className="lg:w-[60%] flex flex-col items-center">
-                  {/* Main image */}
-                  <div className="relative w-full h-[400px] overflow-hidden rounded-lg">
-                    <Image
-                      src={mainImage || "https://via.placeholder.com/700x400"}
-                      alt={`Main Image of ${lodging.Name}`}
-                      fill
-                      className="object-cover"
-                      sizes="(max-width: 1024px) 100vw, 60vw"
-                    />
+                  <div className="relative w-full h-[400px] overflow-hidden rounded-lg bg-slate-100">
+                    {mainImage ? (
+                      <img
+                      src={mainImage}
+                      alt={`Main Image of ${lodging.lodging_name}`}
+                      className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-sm text-slate-500">
+                        No image available
+                      </div>
+                    )}
                   </div>
 
-                  {/* Gallery */}
                   <div className="mt-4 w-full flex justify-between gap-2 overflow-x-auto">
                     {images.slice(0, 10).map((img, idx) => (
                       <button
                         key={`${img.File_Path}-${idx}`}
+                        type="button"
                         onClick={() => setMainImage(img.File_Path)}
-                        className="shrink-0 border-2 border-transparent hover:border-salmon rounded"
-                        title="View"
+                        className={`shrink-0 rounded border-2 ${
+                          mainImage === img.File_Path
+                            ? "border-salmon"
+                            : "border-transparent hover:border-salmon"
+                        }`}
+                        title={`View image ${idx + 1}`}
                       >
-                        <Image
+                        <img
                           src={img.File_Path}
-                          alt={`Image of ${lodging.Name}`}
-                          width={80}
-                          height={80}
+                          alt={`Image ${idx + 1} of ${lodging.lodging_name}`}
                           className="h-[80px] w-[80px] object-cover rounded"
                         />
                       </button>
                     ))}
 
                     {images.length === 0 && (
-                      <p className="text-sm text-slate-600">No images available for this lodging.</p>
+                      <p className="text-sm text-slate-600">
+                        No images available for this lodging.
+                      </p>
                     )}
                   </div>
                 </div>
               </div>
             </section>
 
-            {/* Availability */}
             <section className="mt-12">
               <h2 className="text-2xl font-semibold mb-4">Availability</h2>
 
@@ -287,7 +295,6 @@ export default function LodgingDetailsPage() {
               </div>
             </section>
 
-            {/* Reviews */}
             <section className="mt-12">
               <h2 id="reviews" className="text-2xl font-semibold mb-4">
                 Reviews
@@ -296,9 +303,7 @@ export default function LodgingDetailsPage() {
               {reviews.length > 0 ? (
                 <div className="flex flex-col gap-4">
                   {reviews.map((rev, idx) => {
-                    const avatar =
-                      rev.file_path ||
-                      "https://simplyilm.com/wp-content/uploads/2017/08/temporary-profile-placeholder-1.jpg"
+                    const avatar = "/default-avatar.png"
 
                     const name =
                       rev.anon === 0 && rev.FirstName
@@ -319,9 +324,7 @@ export default function LodgingDetailsPage() {
                             className="rounded-full"
                           />
                           <div>
-                            <h3 className="text-sm font-semibold text-slate-800">
-                              {name}
-                            </h3>
+                            <h3 className="text-sm font-semibold text-slate-800">{name}</h3>
                           </div>
                         </div>
 

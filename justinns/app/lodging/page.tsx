@@ -5,11 +5,11 @@ import Link from "next/link"
 import Image from "next/image"
 import { useSearchParams } from "next/navigation"
 import Header from "@/components/Header"
-import { getLodgingData, type LodgingDetails } from "@/lib/queries"
+import { getLodgingData, type LodgingCard } from "@/lib/queries"
 
 function RatingDots({ rating }: { rating: number }) {
   const filled = Math.floor(rating || 0)
-  const empty = Math.max(0, 5 - filled)
+  const empty = Math.max(0, 5 - filled) 
 
   return (
     <div className="flex items-center gap-1">
@@ -38,7 +38,7 @@ export default function LodgingPage() {
     [searchParams]
   )
 
-  const [rows, setRows] = useState<LodgingDetails[]>([])
+  const [rows, setRows] = useState<LodgingCard[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>("")
 
@@ -84,11 +84,10 @@ export default function LodgingPage() {
         {!loading && !error && rows.length > 0 && (
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {rows.map((row) => {
-              const img =
-                row.Image_Path || "https://via.placeholder.com/700x400"
+              const img = row.image_path || "/default-lodging.png"
 
               const href = `/lodging-details?lodging_name=${encodeURIComponent(
-                row.Name
+                row.name
               )}&lodging_type=${encodeURIComponent(lodgingType)}`
 
               return (
@@ -105,17 +104,17 @@ export default function LodgingPage() {
                     </div>
 
                     <p className="mt-3 text-[18px] font-bold group-hover:underline">
-                      {row.lodging_name}
+                      {row.name}
                     </p>
 
                     <div className="mt-1 flex items-center gap-5">
-                      <RatingDots rating={row.Avg_Rating} />
+                      <RatingDots rating={row.avg_rating} />
                       <div className="text-sm">
-                        {row.Total_Ratings} Reviews
+                        {row.total_ratings} Reviews
                       </div>
                     </div>
 
-                    <p className="mt-1 text-sm">{row.Location}</p>
+                    <p className="mt-1 text-sm">{row.location}</p>
                   </Link>
                 </div>
               )

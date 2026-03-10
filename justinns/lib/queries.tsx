@@ -1,5 +1,42 @@
 import { supabase } from "@/lib/supabase"
 
+function slugifyLodgingName(name: string) {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+}
+
+function getLodgingTypeFolder(lodgingType: string) {
+  const normalized = lodgingType.trim().toLowerCase()
+
+  if (normalized === "hotel" || normalized === "hotels") return "hotels"
+  if (
+    normalized === "pension" ||
+    normalized === "pensions" ||
+    normalized === "pension house" ||
+    normalized === "pension houses"
+  ) {
+    return "pensions"
+  }
+  if (normalized === "inn" || normalized === "inns") return "inns"
+
+  return "hotels"
+}
+
+function getLodgingCoverImageUrl(lodgingName: string, lodgingType: string) {
+  const typeFolder = getLodgingTypeFolder(lodgingType)
+  const lodgingFolder = slugifyLodgingName(lodgingName)
+
+  const { data } = supabase.storage
+    .from("images")
+    .getPublicUrl(`lodgings/${typeFolder}/${lodgingFolder}/image1.png`)
+
+  return data.publicUrl
+}
+
 export type LodgingCard = {
   lodging_id: number
   image_path: string | null
@@ -14,11 +51,21 @@ export type LodgingCard = {
 export async function getLodgingData(lodgingType: string) {
   const { data, error } = await supabase
     .from("lodging_list_view")
-    .select("lodging_id, image_path, name, location, avg_rating, total_ratings, avg_room_price, lodging_type")
+    .select("lodging_id, name, location, avg_rating, total_ratings, avg_room_price, lodging_type")
     .eq("lodging_type", lodgingType)
 
   if (error) throw error
-  return (data ?? []) as LodgingCard[]
+
+  return (data ?? []).map((row: any) => ({
+    lodging_id: row.lodging_id,
+    image_path: getLodgingCoverImageUrl(row.name, row.lodging_type || lodgingType),
+    name: row.name,
+    location: row.location,
+    avg_rating: row.avg_rating,
+    total_ratings: row.total_ratings,
+    avg_room_price: row.avg_room_price,
+    lodging_type: row.lodging_type,
+  })) as LodgingCard[]
 }
 
 export type LodgingDetails = {
