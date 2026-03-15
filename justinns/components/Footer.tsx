@@ -71,7 +71,6 @@ export default function Footer() {
                     </ul>
                 </div>
 
-                {/* Explore: role-based */}
                 <div>
                     <h3 className="font-semibold text-lg mb-3">Explore</h3>
 
@@ -231,7 +230,7 @@ export default function Footer() {
 
             {/* Bottom */}
             <div className="mt-10 pt-6 border-t border-gray-200 text-sm text-gray-700">
-                <p>© 2024 JustInns LLC. All rights reserved.</p>
+                <p>© 2026 JustInns LLC. All rights reserved. Please take note this is just a demo site meant to demonstrate the developer's skills.</p>
 
                 <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3">
                     <a className="hover:underline" href="#">
