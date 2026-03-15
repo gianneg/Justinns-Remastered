@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Header from "@/components/Header"
 import DoubleCalendar from "@/components/Calendar"
@@ -21,7 +21,13 @@ export default function BookingPage() {
     [searchParams]
   )
 
-  const preselectedRoomType = useMemo(
+  // Prefer room_type_id from URL. Fall back to room_type.
+  const preselectedRoomTypeId = useMemo(
+    () => searchParams.get("room_type_id") ?? "",
+    [searchParams]
+  )
+
+  const preselectedRoomTypeName = useMemo(
     () => searchParams.get("room_type") ?? "",
     [searchParams]
   )
@@ -30,7 +36,7 @@ export default function BookingPage() {
   const [roomTypes, setRoomTypes] = useState<RoomTypeOption[]>([])
 
   const [destination, setDestination] = useState(preselectedDestination)
-  const [roomTypeId, setRoomTypeId] = useState(preselectedRoomType)
+  const [roomTypeId, setRoomTypeId] = useState("")
 
   const [adults, setAdults] = useState(1)
   const [children, setChildren] = useState(0)
@@ -43,11 +49,14 @@ export default function BookingPage() {
   const [loadingRoomTypes, setLoadingRoomTypes] = useState(false)
   const [error, setError] = useState("")
 
+  const appliedInitialRoomType = useRef(false)
+
   useEffect(() => {
     const guard = async () => {
       const { data } = await supabase.auth.getUser()
       if (!data.user) router.replace("/login")
     }
+
     guard()
   }, [router])
 
@@ -60,6 +69,7 @@ export default function BookingPage() {
 
       try {
         const list = await getAllLodgings()
+
         if (!cancelled) {
           setLodgings(list as LodgingOption[])
         }
@@ -89,6 +99,7 @@ export default function BookingPage() {
       if (!destination) {
         setRoomTypes([])
         setRoomTypeId("")
+        appliedInitialRoomType.current = false
         return
       }
 
@@ -98,15 +109,43 @@ export default function BookingPage() {
       try {
         const types = await fetchRoomTypesByLodging(Number(destination))
 
-        if (!cancelled) {
-          setRoomTypes(types)
+        if (cancelled) return
 
-          if (preselectedRoomType) {
-            const exists = types.some(
-              (rt) => String(rt.room_type_id) === String(preselectedRoomType)
+        setRoomTypes(types)
+
+        // Only auto-apply the preselected value once for the current destination load
+        if (!appliedInitialRoomType.current) {
+          let matchedId = ""
+
+          if (preselectedRoomTypeId) {
+            const matchById = types.find(
+              (rt) => String(rt.room_type_id) === String(preselectedRoomTypeId)
             )
-            setRoomTypeId(exists ? preselectedRoomType : "")
-          } else {
+            if (matchById) {
+              matchedId = String(matchById.room_type_id)
+            }
+          }
+
+          if (!matchedId && preselectedRoomTypeName) {
+            const matchByName = types.find(
+              (rt) =>
+                rt.room_type.trim().toLowerCase() ===
+                preselectedRoomTypeName.trim().toLowerCase()
+            )
+            if (matchByName) {
+              matchedId = String(matchByName.room_type_id)
+            }
+          }
+
+          setRoomTypeId(matchedId)
+          appliedInitialRoomType.current = true
+        } else {
+          // If the currently selected room type no longer exists for this destination, clear it
+          const stillExists = types.some(
+            (rt) => String(rt.room_type_id) === String(roomTypeId)
+          )
+
+          if (!stillExists) {
             setRoomTypeId("")
           }
         }
@@ -128,7 +167,7 @@ export default function BookingPage() {
     return () => {
       cancelled = true
     }
-  }, [destination, preselectedRoomType])
+  }, [destination, preselectedRoomTypeId, preselectedRoomTypeName, roomTypeId])
 
   const totalGuests = adults + children
 
@@ -177,7 +216,11 @@ export default function BookingPage() {
               <select
                 className="h-10 w-[300px] border border-gray-300 rounded px-2"
                 value={destination}
-                onChange={(e) => setDestination(e.target.value)}
+                onChange={(e) => {
+                  setDestination(e.target.value)
+                  setRoomTypeId("")
+                  appliedInitialRoomType.current = false
+                }}
                 disabled={loadingLodgings}
               >
                 <option value="">
@@ -215,6 +258,8 @@ export default function BookingPage() {
                     <option value="">Select a destination first</option>
                   ) : loadingRoomTypes ? (
                     <option value="">Loading room types...</option>
+                  ) : roomTypes.length === 0 ? (
+                    <option value="">No room types available</option>
                   ) : (
                     <>
                       <option value="">Select Room Type</option>

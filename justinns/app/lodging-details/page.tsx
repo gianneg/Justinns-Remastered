@@ -17,6 +17,7 @@ import {
   type ReviewRow,
   type RoomRow,
 } from "@/lib/lodgingDetails"
+import { addToFavorites, removeFromFavorites, isFavorite } from "@/lib/queries"
 
 function RatingDots({ rating }: { rating: number }) {
   const filled = Math.floor(rating || 0)
@@ -72,12 +73,14 @@ export default function LodgingDetailsPage() {
     Total_Ratings: 0,
   })
   const [images, setImages] = useState<LodgingImage[]>([])
-  const [rooms, setRooms] = useState<RoomRow[]>([])
+  const [roomTypes, setRoomTypes] = useState<RoomRow[]>([])  
   const [reviews, setReviews] = useState<ReviewRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [mainImage, setMainImage] = useState("")
   const [saved, setSaved] = useState(false)
+  const [favoriteLoading, setFavoriteLoading] = useState(false)
+  const [favoriteReady, setFavoriteReady] = useState(false)
 
   useEffect(() => {
     if (!lodgingName) return
@@ -102,7 +105,10 @@ export default function LodgingDetailsPage() {
         setLodging(lod)
         setStats(st)
         setImages(imgs)
-        setRooms(rms)
+        const uniqueRoomTypes = Array.from(
+          new Map(rms.map((room) => [room.Room_Type, room])).values()
+        )
+        setRoomTypes(uniqueRoomTypes)        
         setReviews(revs)
         setMainImage(imgs[0]?.File_Path ?? "")
       } catch (e: any) {
@@ -120,6 +126,50 @@ export default function LodgingDetailsPage() {
       cancelled = true
     }
   }, [lodgingName, lodgingType])
+
+  useEffect(() => {
+    if (!lodging?.lodging_id) return
+
+    let cancelled = false
+
+    const checkFavoriteStatus = async () => {
+      try {
+        setFavoriteReady(false)
+        const result = await isFavorite(Number(lodging.lodging_id))
+        if (!cancelled) setSaved(result)
+      } catch {
+        if (!cancelled) setSaved(false)
+      } finally {
+        if (!cancelled) setFavoriteReady(true)
+      }
+    }
+
+    checkFavoriteStatus()
+
+    return () => {
+      cancelled = true
+    }
+  }, [lodging?.lodging_id])
+
+  async function handleFavoriteToggle() {
+    if (!lodging?.lodging_id || favoriteLoading) return
+
+    try {
+      setFavoriteLoading(true)
+
+      if (saved) {
+        const result = await removeFromFavorites(Number(lodging.lodging_id))
+        setSaved(false)
+      } else {
+        const result = await addToFavorites(Number(lodging.lodging_id))
+        setSaved(true)
+      }
+    } catch (e: any) {
+      alert(e?.message ?? "Failed to update favorite.")
+    } finally {
+      setFavoriteLoading(false)
+    }
+  }
 
   if (!lodgingName) {
     return (
@@ -160,15 +210,27 @@ export default function LodgingDetailsPage() {
                 </h1>
 
                 <button
-                  onClick={() => setSaved((v) => !v)}
-                  className={`border rounded-full px-4 py-2 text-sm flex items-center gap-2 ${
+                  type="button"
+                  onClick={handleFavoriteToggle}
+                  disabled={!favoriteReady || favoriteLoading}
+                  className={`border rounded-full px-4 py-2 text-sm flex items-center gap-2 transition disabled:opacity-60 disabled:cursor-not-allowed ${
                     saved
                       ? "bg-white text-black border-black font-semibold"
                       : "bg-black text-white border-gray-300"
                   }`}
                 >
-                  <span className="text-base">{saved ? "♥" : "♡"}</span>
-                  Save
+                  <span className="text-base">
+                    {!favoriteReady || favoriteLoading ? "…" : saved ? "♥" : "♡"}
+                  </span>
+                  {!favoriteReady
+                    ? "Loading..."
+                    : favoriteLoading
+                    ? saved
+                      ? "Removing..."
+                      : "Saving..."
+                    : saved
+                    ? "Saved"
+                    : "Save"}
                 </button>
               </div>
 
@@ -208,9 +270,9 @@ export default function LodgingDetailsPage() {
                   <div className="relative w-full h-[400px] overflow-hidden rounded-lg bg-slate-100">
                     {mainImage ? (
                       <img
-                      src={mainImage}
-                      alt={`Main Image of ${lodging.lodging_name}`}
-                      className="h-full w-full object-cover"
+                        src={mainImage}
+                        alt={`Main Image of ${lodging.lodging_name}`}
+                        className="h-full w-full object-cover"
                       />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-sm text-slate-500">
@@ -264,8 +326,8 @@ export default function LodgingDetailsPage() {
                   </thead>
 
                   <tbody>
-                    {rooms.length > 0 ? (
-                      rooms.map((r, idx) => (
+                    {roomTypes.length > 0 ? (
+                      roomTypes.map((r, idx) => (
                         <tr key={`${r.Room_Type}-${idx}`} className="hover:bg-slate-100 border-t">
                           <td className="p-4">
                             <span className="font-bold hover:underline cursor-pointer">

@@ -421,3 +421,240 @@ export async function getLodgingById(lodgingId: number) {
   if (error) throw error
   return data as { lodging_id: number; lodging_name: string }
 }
+
+export type FavoriteRow = {
+  favorite_id: number
+  lodging_id: number
+  Name: string
+  lodging_type: string
+}
+
+async function getCurrentAppUserId() {
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+
+  if (authError) throw authError
+  if (!authData.user) throw new Error("User not authenticated.")
+
+  const { data: userRow, error: userError } = await supabase
+    .from("user")
+    .select("user_id")
+    .eq("auth_id", authData.user.id)
+    .single()
+
+  if (userError) throw userError
+  if (!userRow) throw new Error("User record not found.")
+
+  return userRow.user_id as number
+}
+
+export async function getMyFavorites() {
+  const userId = await getCurrentAppUserId()
+
+  const { data, error } = await supabase
+    .from("favorites")
+    .select(`
+      favorite_id,
+      lodging_id,
+      lodging:lodging_id (
+        lodging_name,
+        lodging_type
+      )
+    `)
+    .eq("user_id", userId)
+    .order("favorite_id", { ascending: true })
+
+  if (error) throw error
+
+  return (data ?? []).map((row: any) => ({
+    favorite_id: row.favorite_id,
+    lodging_id: row.lodging_id,
+    Name: row.lodging?.lodging_name ?? "",
+    lodging_type: row.lodging?.lodging_type ?? "",
+  })) as FavoriteRow[]
+}
+
+export async function addToFavorites(lodgingId: number) {
+  const userId = await getCurrentAppUserId()
+
+  const { error } = await supabase.from("favorites").insert({
+    user_id: userId,
+    lodging_id: lodgingId,
+  })
+
+  if (error) throw error
+
+  return {
+    success: true,
+    message: "Lodging added to favorites.",
+    isFavorite: true,
+  }
+}
+
+export async function removeFromFavorites(lodgingId: number) {
+  const userId = await getCurrentAppUserId()
+
+  const { error } = await supabase
+    .from("favorites")
+    .delete()
+    .eq("user_id", userId)
+    .eq("lodging_id", lodgingId)
+
+  if (error) throw error
+
+  return {
+    success: true,
+    message: "Lodging removed from favorites.",
+    isFavorite: false,
+  }
+}
+
+export async function isFavorite(lodgingId: number) {
+  const userId = await getCurrentAppUserId()
+
+  const { data, error } = await supabase
+    .from("favorites")
+    .select("favorite_id")
+    .eq("user_id", userId)
+    .eq("lodging_id", lodgingId)
+    .maybeSingle()
+
+  if (error) throw error
+
+  return Boolean(data)
+}
+
+export type UserProfileRow = {
+  user_id: number
+  firstname: string
+  lastname: string
+  email: string
+  phone_number: string | null
+}
+
+export async function fetchMyProfile() {
+  const userId = await getCurrentAppUserId()
+
+  const { data, error } = await supabase
+    .from("user")
+    .select("user_id, firstname, lastname, email, phone_number")
+    .eq("user_id", userId)
+    .single()
+
+  if (error) throw error
+
+  return {
+    user_id: data.user_id,
+    firstname: data.firstname,
+    lastname: data.lastname,
+    email: data.email,
+    phone_number: data.phone_number ?? "",
+  } as UserProfileRow
+}
+
+export async function fetchMyProfileImage() {
+  const userId = await getCurrentAppUserId()
+
+  const { data, error } = await supabase
+    .from("user_images")
+    .select("file_path, file_name")
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (error) throw error
+
+  if (!data?.file_path) {
+    return {
+      file_path: "",
+      file_name: "",
+    }
+  }
+
+  const { data: publicData } = supabase.storage
+    .from("images")
+    .getPublicUrl(data.File_Path)
+
+  return {
+    file_path: publicData.publicUrl,
+    file_name: data.File_Name ?? "",
+  }
+}
+
+export async function updateMyProfile(args: {
+  fname: string
+  lname: string
+  email: string
+  phone: string
+}) {
+  const userId = await getCurrentAppUserId()
+
+  const { error } = await supabase
+    .from("user")
+    .update({
+      FirstName: args.fname,
+      LastName: args.lname,
+      Email: args.email,
+      Phone_Number: args.phone,
+    })
+    .eq("user_id", userId)
+
+  if (error) throw error
+
+  return "Profile updated successfully."
+}
+
+export async function uploadMyProfileImage(file: File, firstName: string, lastName: string) {
+  const userId = await getCurrentAppUserId()
+
+  const ext = file.name.split(".").pop()?.toLowerCase() || "png"
+  const safeName = `${firstName}${lastName}`
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+
+  const fileName = `${safeName}.${ext}`
+  const filePath = `pfp/${fileName}`
+
+  const { error: uploadError } = await supabase.storage
+    .from("images")
+    .upload(filePath, file, {
+      upsert: true,
+    })
+
+  if (uploadError) throw uploadError
+
+  const { data: existing, error: existingError } = await supabase
+    .from("user_images")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (existingError) throw existingError
+
+  if (existing) {
+    const { error: updateError } = await supabase
+      .from("user_images")
+      .update({
+        file_path: filePath,
+        file_name: fileName,
+      })
+      .eq("User_ID", userId)
+
+    if (updateError) throw updateError
+  } else {
+    const { error: insertError } = await supabase
+      .from("user_images")
+      .insert({
+        user_id: userId,
+        file_path: filePath,
+        file_name: fileName,
+      })
+
+    if (insertError) throw insertError
+  }
+
+  const { data: publicData } = supabase.storage
+    .from("images")
+    .getPublicUrl(filePath)
+
+  return publicData.publicUrl
+}

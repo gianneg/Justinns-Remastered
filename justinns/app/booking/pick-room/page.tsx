@@ -3,120 +3,173 @@
 import { useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Header from "@/components/Header"
-import DoubleCalendar from "@/components/Calendar"
 import { supabase } from "@/lib/supabase"
-import {
-  getAllLodgings,
-  fetchRoomTypesByLodging,
-  type LodgingOption,
-  type RoomTypeOption,
-} from "@/lib/queries"
 
-export default function BookingPage() {
+type RoomRow = {
+  room_id: number
+  room_number: string
+  room_floor: string | number | null
+  lodging_id: number
+  room_type_id: number
+  room_type: {
+    room_type_id: number
+    room_type: string
+    max_persons: number
+  } | null
+}
+
+type BookingRow = {
+  room_id: number
+  checkin_date: string
+  checkout_date: string
+  status: string
+}
+
+type AvailableRoom = {
+  room_id: number
+  room_number: string
+  room_floor: string | number | null
+  lodging_id: number
+  room_type: string
+}
+
+function datesOverlap(
+  requestedCheckIn: string,
+  requestedCheckOut: string,
+  bookingCheckIn: string,
+  bookingCheckOut: string
+) {
+  const reqStart = new Date(`${requestedCheckIn}T00:00:00`)
+  const reqEnd = new Date(`${requestedCheckOut}T00:00:00`)
+  const bookStart = new Date(`${bookingCheckIn}T00:00:00`)
+  const bookEnd = new Date(`${bookingCheckOut}T00:00:00`)
+
+  return reqStart < bookEnd && reqEnd > bookStart
+}
+
+export default function PickRoomPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const sp = useSearchParams()
 
-  const preselectedDestination = useMemo(
-    () => searchParams.get("destination") ?? "",
-    [searchParams]
-  )
+  const lodgingId = sp.get("lodgingId") ?? ""
+  const roomTypeId = sp.get("roomTypeId") ?? ""
+  const checkIn = sp.get("checkIn") ?? ""
+  const checkOut = sp.get("checkOut") ?? ""
+  const adults = Number(sp.get("adults") ?? "0")
+  const children = Number(sp.get("children") ?? "0")
+  const guests = Number(sp.get("guests") ?? "0")
+  const code = sp.get("code") ?? ""
 
-  const preselectedRoomType = useMemo(
-    () => searchParams.get("room_type") ?? "",
-    [searchParams]
-  )
+  const ready = useMemo(() => {
+    return Boolean(lodgingId && roomTypeId && checkIn && checkOut)
+  }, [lodgingId, roomTypeId, checkIn, checkOut])
 
-  const [lodgings, setLodgings] = useState<LodgingOption[]>([])
-  const [roomTypes, setRoomTypes] = useState<RoomTypeOption[]>([])
-
-  const [destination, setDestination] = useState(preselectedDestination)
-  const [roomTypeId, setRoomTypeId] = useState(preselectedRoomType)
-
-  const [adults, setAdults] = useState(1)
-  const [children, setChildren] = useState(0)
-  const [discountCode, setDiscountCode] = useState("")
-
-  const [checkInISO, setCheckInISO] = useState("")
-  const [checkOutISO, setCheckOutISO] = useState("")
-
-  const [loadingLodgings, setLoadingLodgings] = useState(true)
-  const [loadingRoomTypes, setLoadingRoomTypes] = useState(false)
+  const [rooms, setRooms] = useState<AvailableRoom[]>([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
   useEffect(() => {
     const guard = async () => {
       const { data } = await supabase.auth.getUser()
-      if (!data.user) router.replace("/login")
+      if (!data.user) {
+        router.replace("/login")
+      }
     }
+
     guard()
   }, [router])
 
   useEffect(() => {
+    if (!ready) {
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
 
     const run = async () => {
-      setLoadingLodgings(true)
+      setLoading(true)
       setError("")
 
       try {
-        const list = await getAllLodgings()
-        if (!cancelled) {
-          setLodgings(list as LodgingOption[])
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setError(e?.message ?? "Failed to load destinations.")
-          setLodgings([])
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingLodgings(false)
-        }
-      }
-    }
-
-    run()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-
-    const run = async () => {
-      if (!destination) {
-        setRoomTypes([])
-        setRoomTypeId("")
-        return
-      }
-
-      setLoadingRoomTypes(true)
-
-      try {
-        const types = await fetchRoomTypesByLodging(Number(destination))
-        if (!cancelled) {
-          setRoomTypes(types)
-
-          if (preselectedRoomType) {
-            const exists = types.some(
-              (rt) => String(rt.room_type_id) === String(preselectedRoomType)
+        const { data: roomData, error: roomError } = await supabase
+          .from("room")
+          .select(`
+            room_id,
+            room_number,
+            room_floor,
+            lodging_id,
+            room_type_id,
+            room_type (
+              room_type_id,
+              room_type,
+              max_persons
             )
-            setRoomTypeId(exists ? preselectedRoomType : "")
-          } else {
-            setRoomTypeId("")
+          `)
+          .eq("lodging_id", Number(lodgingId))
+          .eq("room_type_id", Number(roomTypeId))
+
+        if (roomError) throw roomError
+
+        const typedRooms = (roomData ?? []) as RoomRow[]
+
+        const filteredByCapacity = typedRooms.filter((room) => {
+          return Number(room.room_type?.max_persons ?? 0) >= guests
+        })
+
+        if (filteredByCapacity.length === 0) {
+          if (!cancelled) {
+            setRooms([])
           }
+          return
+        }
+
+        const roomIds = filteredByCapacity.map((room) => room.room_id)
+
+        const { data: bookingData, error: bookingError } = await supabase
+          .from("booking")
+          .select("room_id, checkin_date, checkout_date, status")
+          .in("room_id", roomIds)
+          .eq("status", "Active")
+
+        if (bookingError) throw bookingError
+
+        const activeBookings = (bookingData ?? []) as BookingRow[]
+
+        const availableRooms = filteredByCapacity.filter((room) => {
+          const conflictingBooking = activeBookings.find((booking) => {
+            if (booking.room_id !== room.room_id) return false
+
+            return datesOverlap(
+              checkIn,
+              checkOut,
+              booking.checkin_date,
+              booking.checkout_date
+            )
+          })
+
+          return !conflictingBooking
+        })
+
+        const mappedRooms: AvailableRoom[] = availableRooms.map((room) => ({
+          room_id: room.room_id,
+          room_number: room.room_number,
+          room_floor: room.room_floor,
+          lodging_id: room.lodging_id,
+          room_type: room.room_type?.room_type ?? "",
+        }))
+
+        if (!cancelled) {
+          setRooms(mappedRooms)
         }
       } catch (e: any) {
         if (!cancelled) {
-          setError(e?.message ?? "Failed to load room types.")
-          setRoomTypes([])
-          setRoomTypeId("")
+          setError(e?.message ?? "Failed to load available rooms.")
+          setRooms([])
         }
       } finally {
         if (!cancelled) {
-          setLoadingRoomTypes(false)
+          setLoading(false)
         }
       }
     }
@@ -126,166 +179,117 @@ export default function BookingPage() {
     return () => {
       cancelled = true
     }
-  }, [destination, preselectedRoomType])
+  }, [ready, lodgingId, roomTypeId, checkIn, checkOut, guests])
 
-  const totalGuests = adults + children
-
-  const handleConfirm = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!destination) {
-      alert("Select destination.")
-      return
-    }
-
-    if (!roomTypeId) {
-      alert("Select room type.")
-      return
-    }
-
-    if (!checkInISO || !checkOutISO) {
-      alert("Select check-in and check-out dates.")
-      return
-    }
-
+  const handleBookRoom = (roomId: number) => {
     const qs = new URLSearchParams({
-      lodgingId: destination,
+      lodgingId,
       roomTypeId,
-      checkIn: checkInISO,
-      checkOut: checkOutISO,
+      roomId: String(roomId),
+      checkIn,
+      checkOut,
       adults: String(adults),
       children: String(children),
-      guests: String(totalGuests),
-      code: discountCode,
+      guests: String(guests),
+      code,
     })
 
-    router.push(`/booking/pick-room?${qs.toString()}`)
+    router.push(`/booking/confirmation?${qs.toString()}`)
+  }
+
+  if (!ready) {
+    return (
+      <>
+        <Header />
+        <main className="py-10 flex justify-center">
+          <div className="w-[1000px]">
+            <p className="text-sm text-red-600">Missing booking details.</p>
+          </div>
+        </main>
+      </>
+    )
   }
 
   return (
     <>
       <Header />
 
-      <main className="mt-10 flex justify-center">
-        <div className="w-[1100px]">
-          <form onSubmit={handleConfirm}>
-            <div className="mb-5">
-              <label className="block text-sm mb-1">DESTINATION</label>
+      <main className="py-10 flex justify-center">
+        <div className="w-[1000px]">
+          {loading ? (
+            <p className="text-sm">Loading available rooms...</p>
+          ) : error ? (
+            <p className="text-sm text-red-600">{error}</p>
+          ) : rooms.length > 0 ? (
+            <>
+              <h3 className="text-xl font-semibold mb-4">
+                Number of available rooms: {rooms.length}
+              </h3>
 
-              <select
-                className="h-10 w-[300px] border border-gray-300 rounded px-2"
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                disabled={loadingLodgings}
-              >
-                <option value="">
-                  {loadingLodgings ? "Loading destinations..." : "Select Destination"}
-                </option>
+              <div className="overflow-x-auto">
+                <table className="w-full border border-gray-300">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border border-gray-300 p-3 text-left">
+                        Room Number
+                      </th>
+                      <th className="border border-gray-300 p-3 text-left">
+                        Room Floor
+                      </th>
+                      <th className="border border-gray-300 p-3 text-left">
+                        Room Type
+                      </th>
+                      <th className="border border-gray-300 p-3 text-left">
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
 
-                {lodgings.map((l) => (
-                  <option key={l.lodging_id} value={String(l.lodging_id)}>
-                    {l.lodging_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex justify-between p-5 shadow-md">
-              <DoubleCalendar
-                onChange={({ checkInISO, checkOutISO }) => {
-                  setCheckInISO(checkInISO)
-                  setCheckOutISO(checkOutISO)
-                }}
-              />
-
-              <div className="w-[220px] p-5 shadow-lg">
-                <h3 className="text-center text-xl mb-4">Book Your Stay</h3>
-                <hr className="mb-3" />
-
-                <label className="font-bold block mt-2 mb-1 text-sm">
-                  Room Type
-                </label>
-
-                <select
-                  className="w-full p-2 text-xs border border-gray-300 rounded mb-3"
-                  value={roomTypeId}
-                  onChange={(e) => setRoomTypeId(e.target.value)}
-                  disabled={!destination || loadingRoomTypes}
-                >
-                  {!destination ? (
-                    <option value="">Select a destination first</option>
-                  ) : loadingRoomTypes ? (
-                    <option value="">Loading room types...</option>
-                  ) : (
-                    <>
-                      <option value="">Select Room Type</option>
-                      {roomTypes.map((rt) => (
-                        <option
-                          key={rt.room_type_id}
-                          value={String(rt.room_type_id)}
-                        >
-                          {rt.room_type}
-                        </option>
-                      ))}
-                    </>
-                  )}
-                </select>
-
-                <label className="font-bold block mt-2 mb-1 text-sm">Adults</label>
-                <select
-                  className="w-full p-2 text-xs border border-gray-300 rounded mb-3"
-                  value={adults}
-                  onChange={(e) => setAdults(Number(e.target.value))}
-                >
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n}>
-                      {n} Adult{n > 1 ? "s" : ""}
-                    </option>
-                  ))}
-                </select>
-
-                <label className="font-bold block mt-2 mb-1 text-sm">
-                  Children
-                </label>
-                <select
-                  className="w-full p-2 text-xs border border-gray-300 rounded mb-3"
-                  value={children}
-                  onChange={(e) => setChildren(Number(e.target.value))}
-                >
-                  {[0, 1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n}>
-                      {n === 0 ? "N/A" : `${n} Child${n > 1 ? "ren" : ""}`}
-                    </option>
-                  ))}
-                </select>
-
-                <label className="font-bold block mt-2 mb-1 text-sm">
-                  Know a code?
-                </label>
-                <input
-                  className="w-full h-10 bg-gray-200 px-2 mb-4"
-                  placeholder="Use it!"
-                  value={discountCode}
-                  onChange={(e) => setDiscountCode(e.target.value)}
-                />
-
-                <button
-                  type="submit"
-                  className="w-full bg-gray-200 py-3 hover:bg-gray-500 hover:text-white"
-                >
-                  CONFIRM →
-                </button>
-
-                <p className="text-xs mt-3">
-                  {checkInISO && checkOutISO
-                    ? `Dates: ${checkInISO} → ${checkOutISO}`
-                    : "Select your dates"}
-                </p>
-
-                {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
+                  <tbody>
+                    {rooms.map((room, index) => (
+                      <tr
+                        key={room.room_id}
+                        className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                      >
+                        <td className="border border-gray-300 p-3">
+                          {room.room_number}
+                        </td>
+                        <td className="border border-gray-300 p-3">
+                          {room.room_floor ?? "-"}
+                        </td>
+                        <td className="border border-gray-300 p-3">
+                          {room.room_type}
+                        </td>
+                        <td className="border border-gray-300 p-3">
+                          <button
+                            type="button"
+                            onClick={() => handleBookRoom(room.room_id)}
+                            className="bg-gray-200 px-4 py-2 rounded hover:bg-gray-500 hover:text-white"
+                          >
+                            Book this room!
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+            </>
+          ) : (
+            <div>
+              <h3 className="text-lg font-semibold mb-3">
+                No available rooms found.
+              </h3>
+
+              <button
+                type="button"
+                onClick={() => router.push("/booking")}
+                className="text-blue-600 underline"
+              >
+                Select another date.
+              </button>
             </div>
-          </form>
+          )}
         </div>
       </main>
     </>
