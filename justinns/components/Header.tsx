@@ -96,7 +96,7 @@ export default function Header() {
         </Link>
         <Link
           className="text-black hover:underline"
-          href="/lodging?lodging_type=Pension%20House"
+          href="/lodging?lodging_type=Pension"
         >
           Pension
         </Link>
