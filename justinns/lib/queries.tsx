@@ -273,10 +273,9 @@ export type LodgingOption = {
     room_type_id: number
     room_type: string
     lodging_id: number
-    max_persons: number
   }
 
-  export async function fetchRoomTypesByLodging(lodgingId: number) {
+export async function fetchRoomTypesByLodging(lodgingId: number) {
   const { data, error } = await supabase
     .from("room_type")
     .select("room_type_id, room_type, lodging_id")
