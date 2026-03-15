@@ -5,18 +5,22 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Header from "@/components/Header"
 import DoubleCalendar from "@/components/Calendar"
 import { supabase } from "@/lib/supabase"
-import { getAllLodgings, fetchRoomTypesByLodging } from "@/lib/queries"
-import type { LodgingOption, RoomTypeOption } from "@/lib/queries"
+import {
+  getAllLodgings,
+  fetchRoomTypesByLodging,
+  type LodgingOption,
+  type RoomTypeOption,
+} from "@/lib/queries"
 
 export default function BookingPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // allow preselect like your old GET params
   const preselectedDestination = useMemo(
     () => searchParams.get("destination") ?? "",
     [searchParams]
   )
+
   const preselectedRoomType = useMemo(
     () => searchParams.get("room_type") ?? "",
     [searchParams]
@@ -35,7 +39,10 @@ export default function BookingPage() {
   const [checkInISO, setCheckInISO] = useState("")
   const [checkOutISO, setCheckOutISO] = useState("")
 
-  // auth guard (replaces PHP alert + redirect)
+  const [loadingLodgings, setLoadingLodgings] = useState(true)
+  const [loadingRoomTypes, setLoadingRoomTypes] = useState(false)
+  const [error, setError] = useState("")
+
   useEffect(() => {
     const guard = async () => {
       const { data } = await supabase.auth.getUser()
@@ -44,42 +51,102 @@ export default function BookingPage() {
     guard()
   }, [router])
 
-  // load destinations
   useEffect(() => {
+    let cancelled = false
+
     const run = async () => {
-      const list = await fetchLodgings()
-      setLodgings(list)
+      setLoadingLodgings(true)
+      setError("")
+
+      try {
+        const list = await getAllLodgings()
+        if (!cancelled) {
+          setLodgings(list as LodgingOption[])
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e?.message ?? "Failed to load destinations.")
+          setLodgings([])
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingLodgings(false)
+        }
+      }
     }
+
     run()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  // load room types when destination changes
   useEffect(() => {
+    let cancelled = false
+
     const run = async () => {
       if (!destination) {
         setRoomTypes([])
         setRoomTypeId("")
         return
       }
-      const types = await fetchRoomTypesByLodging(Number(destination))
-      setRoomTypes(types)
 
-      // keep preselected if it exists, else reset
-      if (preselectedRoomType) setRoomTypeId(preselectedRoomType)
-      else setRoomTypeId("")
+      setLoadingRoomTypes(true)
+
+      try {
+        const types = await fetchRoomTypesByLodging(Number(destination))
+        if (!cancelled) {
+          setRoomTypes(types)
+
+          if (preselectedRoomType) {
+            const exists = types.some(
+              (rt) => String(rt.room_type_id) === String(preselectedRoomType)
+            )
+            setRoomTypeId(exists ? preselectedRoomType : "")
+          } else {
+            setRoomTypeId("")
+          }
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e?.message ?? "Failed to load room types.")
+          setRoomTypes([])
+          setRoomTypeId("")
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingRoomTypes(false)
+        }
+      }
     }
+
     run()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [destination])
+
+    return () => {
+      cancelled = true
+    }
+  }, [destination, preselectedRoomType])
 
   const totalGuests = adults + children
 
   const handleConfirm = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!destination) return alert("Select destination.")
-    if (!roomTypeId) return alert("Select room type.")
-    if (!checkInISO || !checkOutISO) return alert("Select check-in and check-out dates.")
+    if (!destination) {
+      alert("Select destination.")
+      return
+    }
+
+    if (!roomTypeId) {
+      alert("Select room type.")
+      return
+    }
+
+    if (!checkInISO || !checkOutISO) {
+      alert("Select check-in and check-out dates.")
+      return
+    }
 
     const qs = new URLSearchParams({
       lodgingId: destination,
@@ -101,7 +168,6 @@ export default function BookingPage() {
 
       <main className="mt-10 flex justify-center">
         <div className="w-[1100px]">
-
           <form onSubmit={handleConfirm}>
             <div className="mb-5">
               <label className="block text-sm mb-1">DESTINATION</label>
@@ -110,8 +176,12 @@ export default function BookingPage() {
                 className="h-10 w-[300px] border border-gray-300 rounded px-2"
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
+                disabled={loadingLodgings}
               >
-                <option value="">Select Destination</option>
+                <option value="">
+                  {loadingLodgings ? "Loading destinations..." : "Select Destination"}
+                </option>
+
                 {lodgings.map((l) => (
                   <option key={l.lodging_id} value={String(l.lodging_id)}>
                     {l.lodging_name}
@@ -121,8 +191,6 @@ export default function BookingPage() {
             </div>
 
             <div className="flex justify-between p-5 shadow-md">
-
-              {/* Calendar */}
               <DoubleCalendar
                 onChange={({ checkInISO, checkOutISO }) => {
                   setCheckInISO(checkInISO)
@@ -130,24 +198,32 @@ export default function BookingPage() {
                 }}
               />
 
-              {/* Right panel */}
               <div className="w-[220px] p-5 shadow-lg">
                 <h3 className="text-center text-xl mb-4">Book Your Stay</h3>
                 <hr className="mb-3" />
 
-                <label className="font-bold block mt-2 mb-1 text-sm">Room Type</label>
+                <label className="font-bold block mt-2 mb-1 text-sm">
+                  Room Type
+                </label>
+
                 <select
                   className="w-full p-2 text-xs border border-gray-300 rounded mb-3"
                   value={roomTypeId}
                   onChange={(e) => setRoomTypeId(e.target.value)}
+                  disabled={!destination || loadingRoomTypes}
                 >
                   {!destination ? (
                     <option value="">Select a destination first</option>
+                  ) : loadingRoomTypes ? (
+                    <option value="">Loading room types...</option>
                   ) : (
                     <>
                       <option value="">Select Room Type</option>
                       {roomTypes.map((rt) => (
-                        <option key={rt.room_type_id} value={String(rt.room_type_id)}>
+                        <option
+                          key={rt.room_type_id}
+                          value={String(rt.room_type_id)}
+                        >
                           {rt.room_type}
                         </option>
                       ))}
@@ -161,23 +237,31 @@ export default function BookingPage() {
                   value={adults}
                   onChange={(e) => setAdults(Number(e.target.value))}
                 >
-                  {[1,2,3,4,5].map((n) => (
-                    <option key={n} value={n}>{n} Adult{n > 1 ? "s" : ""}</option>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {n} Adult{n > 1 ? "s" : ""}
+                    </option>
                   ))}
                 </select>
 
-                <label className="font-bold block mt-2 mb-1 text-sm">Children</label>
+                <label className="font-bold block mt-2 mb-1 text-sm">
+                  Children
+                </label>
                 <select
                   className="w-full p-2 text-xs border border-gray-300 rounded mb-3"
                   value={children}
                   onChange={(e) => setChildren(Number(e.target.value))}
                 >
-                  {[0,1,2,3,4,5].map((n) => (
-                    <option key={n} value={n}>{n === 0 ? "N/A" : `${n} Child${n > 1 ? "ren" : ""}`}</option>
+                  {[0, 1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {n === 0 ? "N/A" : `${n} Child${n > 1 ? "ren" : ""}`}
+                    </option>
                   ))}
                 </select>
 
-                <label className="font-bold block mt-2 mb-1 text-sm">Know a code?</label>
+                <label className="font-bold block mt-2 mb-1 text-sm">
+                  Know a code?
+                </label>
                 <input
                   className="w-full h-10 bg-gray-200 px-2 mb-4"
                   placeholder="Use it!"
@@ -197,11 +281,11 @@ export default function BookingPage() {
                     ? `Dates: ${checkInISO} → ${checkOutISO}`
                     : "Select your dates"}
                 </p>
-              </div>
 
+                {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
+              </div>
             </div>
           </form>
-
         </div>
       </main>
     </>

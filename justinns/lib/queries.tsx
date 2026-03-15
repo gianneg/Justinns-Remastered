@@ -276,6 +276,17 @@ export type LodgingOption = {
     max_persons: number
   }
 
+  export async function fetchRoomTypesByLodging(lodgingId: number) {
+  const { data, error } = await supabase
+    .from("room_type")
+    .select("room_type_id, room_type, lodging_id")
+    .eq("lodging_id", lodgingId)
+    .order("room_type", { ascending: true })
+
+  if (error) throw error
+  return (data ?? []) as RoomTypeOption[]
+}
+
 export async function addRoomType(args: {
   typename: string
   description: string
