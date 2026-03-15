@@ -5,17 +5,19 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Header from "@/components/Header"
 import { supabase } from "@/lib/supabase"
 
+type RoomTypeRow = {
+  room_type_id: number
+  room_type: string
+  max_persons: number
+}
+
 type RoomRow = {
   room_id: number
   room_number: string
   room_floor: string | number | null
   lodging_id: number
   room_type_id: number
-  room_type: {
-    room_type_id: number
-    room_type: string
-    max_persons: number
-  } | null
+  room_type: RoomTypeRow[] | null
 }
 
 type BookingRow = {
@@ -111,10 +113,32 @@ export default function PickRoomPage() {
 
         if (roomError) throw roomError
 
-        const typedRooms = (roomData ?? []) as RoomRow[]
+        const typedRooms: RoomRow[] = (roomData ?? []).map((room: any) => ({
+          room_id: Number(room.room_id),
+          room_number: String(room.room_number),
+          room_floor: room.room_floor ?? null,
+          lodging_id: Number(room.lodging_id),
+          room_type_id: Number(room.room_type_id),
+          room_type: Array.isArray(room.room_type)
+            ? room.room_type.map((rt: any) => ({
+                room_type_id: Number(rt.room_type_id),
+                room_type: String(rt.room_type),
+                max_persons: Number(rt.max_persons),
+              }))
+            : room.room_type
+              ? [
+                  {
+                    room_type_id: Number(room.room_type.room_type_id),
+                    room_type: String(room.room_type.room_type),
+                    max_persons: Number(room.room_type.max_persons),
+                  },
+                ]
+              : null,
+        }))
 
         const filteredByCapacity = typedRooms.filter((room) => {
-          return Number(room.room_type?.max_persons ?? 0) >= guests
+          const firstRoomType = room.room_type?.[0] ?? null
+          return Number(firstRoomType?.max_persons ?? 0) >= guests
         })
 
         if (filteredByCapacity.length === 0) {
@@ -134,7 +158,12 @@ export default function PickRoomPage() {
 
         if (bookingError) throw bookingError
 
-        const activeBookings = (bookingData ?? []) as BookingRow[]
+        const activeBookings: BookingRow[] = (bookingData ?? []).map((booking: any) => ({
+          room_id: Number(booking.room_id),
+          checkin_date: String(booking.checkin_date),
+          checkout_date: String(booking.checkout_date),
+          status: String(booking.status),
+        }))
 
         const availableRooms = filteredByCapacity.filter((room) => {
           const conflictingBooking = activeBookings.find((booking) => {
@@ -156,7 +185,7 @@ export default function PickRoomPage() {
           room_number: room.room_number,
           room_floor: room.room_floor,
           lodging_id: room.lodging_id,
-          room_type: room.room_type?.room_type ?? "",
+          room_type: room.room_type?.[0]?.room_type ?? "",
         }))
 
         if (!cancelled) {
