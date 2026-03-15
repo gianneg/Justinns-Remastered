@@ -58,7 +58,7 @@ export default function BookingPage() {
         return
       }
   
-      const types = await getAvailableRooms(Number(destination))
+      const types = await getAvailableRooms(String(destination))
       setRoomTypes(types)
   
       if (preselectedRoomType) setRoomTypeId(preselectedRoomType)
