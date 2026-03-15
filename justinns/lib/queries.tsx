@@ -571,11 +571,11 @@ export async function fetchMyProfileImage() {
 
   const { data: publicData } = supabase.storage
     .from("images")
-    .getPublicUrl(data.File_Path)
+    .getPublicUrl(data.file_path)
 
   return {
     file_path: publicData.publicUrl,
-    file_name: data.File_Name ?? "",
+    file_name: data.file_name ?? "",
   }
 }
 
