@@ -21,7 +21,6 @@ export default function BookingPage() {
     [searchParams]
   )
 
-  // Prefer room_type_id from URL. Fall back to room_type.
   const preselectedRoomTypeId = useMemo(
     () => searchParams.get("room_type_id") ?? "",
     [searchParams]
