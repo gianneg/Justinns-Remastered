@@ -5,7 +5,11 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import Header from "@/components/Header"
-import { getAllLodgings, type LodgingCard } from "@/lib/queries"
+import {
+  getAllLodgings,
+  getLodgingData,
+  type LodgingCard,
+} from "@/lib/queries"
 
 type LodgingOption = {
   lodging_id: number
@@ -40,7 +44,8 @@ function RatingDots({ rating }: { rating: number }) {
 export default function HomePage() {
   const router = useRouter()
 
-  const [lodgings, setLodgings] = useState<LodgingCard[]>([])
+  const [lodgingOptions, setLodgingOptions] = useState<LodgingOption[]>([])
+  const [cards, setCards] = useState<LodgingCard[]>([])
   const [selectedId, setSelectedId] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -51,8 +56,21 @@ export default function HomePage() {
       setError("")
 
       try {
-        const data = await getAllLodgings()
-        setLodgings(data ?? [])
+        const [allLodgings, hotels, pensions, inns] = await Promise.all([
+          getAllLodgings(),
+          getLodgingData("Hotel"),
+          getLodgingData("Pension"),
+          getLodgingData("Inn"),
+        ])
+
+        const mappedOptions = (allLodgings ?? []).map((x: any) => ({
+          lodging_id: Number(x.lodging_id),
+          lodging_name: x.lodging_name,
+          lodging_type: x.lodging_type,
+        }))
+
+        setLodgingOptions(mappedOptions)
+        setCards([...(hotels ?? []), ...(pensions ?? []), ...(inns ?? [])])
       } catch (e: any) {
         setError(e?.message ?? "Failed to load lodgings.")
       } finally {
@@ -64,9 +82,9 @@ export default function HomePage() {
   }, [])
 
   const grouped = useMemo(() => {
-    const groups: Record<string, LodgingCard[]> = {}
+    const groups: Record<string, LodgingOption[]> = {}
 
-    for (const lodging of lodgings) {
+    for (const lodging of lodgingOptions) {
       if (!groups[lodging.lodging_type]) {
         groups[lodging.lodging_type] = []
       }
@@ -75,11 +93,11 @@ export default function HomePage() {
     }
 
     return groups
-  }, [lodgings])
+  }, [lodgingOptions])
 
   const selectedLodging = useMemo(
-    () => lodgings.find((l) => String(l.lodging_id) === selectedId),
-    [lodgings, selectedId]
+    () => lodgingOptions.find((l) => String(l.lodging_id) === selectedId),
+    [lodgingOptions, selectedId]
   )
 
   const handleGo = () => {
@@ -87,7 +105,7 @@ export default function HomePage() {
 
     router.push(
       `/lodging-details?lodging_name=${encodeURIComponent(
-        selectedLodging.name
+        selectedLodging.lodging_name
       )}&lodging_type=${encodeURIComponent(selectedLodging.lodging_type)}`
     )
   }
@@ -99,9 +117,7 @@ export default function HomePage() {
       <main className="mx-auto max-w-6xl px-4 py-8">
         <div className="flex justify-center mb-10">
           <div className="flex flex-col items-center gap-4 border border-black p-6 rounded-lg w-full max-w-2xl">
-            <h2 className="text-xl font-semibold text-center">
-              Select a lodging
-            </h2>
+            <h2 className="text-xl font-semibold text-center">Select Lodging</h2>
 
             <p className="text-center text-sm text-gray-600">
               Have a specific place in mind already? Navigate to its page right now.
@@ -120,7 +136,7 @@ export default function HomePage() {
                   <optgroup key={type} label={type}>
                     {items.map((lodging) => (
                       <option key={lodging.lodging_id} value={lodging.lodging_id}>
-                        {lodging.name}
+                        {lodging.lodging_name}
                       </option>
                     ))}
                   </optgroup>
@@ -146,13 +162,13 @@ export default function HomePage() {
           <p className="text-sm text-red-600">{error}</p>
         )}
 
-        {!loading && !error && lodgings.length === 0 && (
-          <h2 className="text-center text-xl mt-10">No results found</h2>
+        {!loading && !error && cards.length === 0 && (
+          <h1 className="text-center text-xl mt-10">No results found</h1>
         )}
 
-        {!loading && !error && lodgings.length > 0 && (
+        {!loading && !error && cards.length > 0 && (
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {lodgings.map((row) => {
+            {cards.map((row) => {
               const img = row.image_path || "/default-lodging.png"
 
               const href = `/lodging-details?lodging_name=${encodeURIComponent(
@@ -178,9 +194,7 @@ export default function HomePage() {
 
                     <div className="mt-1 flex items-center gap-5">
                       <RatingDots rating={row.avg_rating} />
-                      <div className="text-sm">
-                        {row.total_ratings} Reviews
-                      </div>
+                      <div className="text-sm">{row.total_ratings} Reviews</div>
                     </div>
 
                     <p className="mt-1 text-sm">{row.location}</p>
