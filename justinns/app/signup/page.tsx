@@ -15,7 +15,6 @@ export default function SignupPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
-  const [userType, setUserType] = useState<"0" | "1">("0")
   const [error, setError] = useState("")
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -48,7 +47,7 @@ export default function SignupPage() {
       firstname: firstName,
       lastname: lastName,
       phone_number: phone,
-      is_admin: userType === "1",
+      is_admin: false,
       profile_image: null,
     })
 
@@ -83,15 +82,6 @@ export default function SignupPage() {
 
           <input className="border border-black px-3 py-2 rounded" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           <input className="border border-black px-3 py-2 rounded" type="password" placeholder="Confirm Password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
-
-          <select
-            className="border border-black px-3 py-2 rounded"
-            value={userType}
-            onChange={(e) => setUserType(e.target.value as "0" | "1")}
-          >
-            <option value="0">user</option>
-            <option value="1">admin</option>
-          </select>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 

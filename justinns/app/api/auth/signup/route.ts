@@ -5,7 +5,7 @@ export async function POST(req: Request) {
     try {
         const body = await req.json();
 
-        const { userId, firstName, lastName, phone, isAdmin } = body;
+        const { userId, firstName, lastName, phone } = body;
 
         if (!userId) {
             return NextResponse.json(
@@ -25,7 +25,8 @@ export async function POST(req: Request) {
             firstname: firstName,
             lastname: lastName,
             phone_number: phone,
-            is_admin: isAdmin === "1" ? 1 : 0,
+            // new accounts are always regular users; admins are set in the database
+            is_admin: false,
             profile_image: null,
         });
 
